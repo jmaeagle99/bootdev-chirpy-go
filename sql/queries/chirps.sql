@@ -15,3 +15,8 @@ DELETE FROM chirps;
 SELECT *
 FROM chirps
 ORDER BY chirps.created_at;
+
+-- name: GetChirp :one
+SELECT *
+FROM chirps
+WHERE id = $1;

@@ -104,6 +104,30 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 		http.StatusOK)
 }
 
+func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		writeAsJson(
+			w,
+			ErrorResponse{
+				Error: "chirpId is not valid",
+			},
+			http.StatusBadRequest)
+		return
+	}
+
+	chirp, err := cfg.db.GetChirp(r.Context(), id)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	writeAsJson(
+		w,
+		convertChirp(chirp),
+		http.StatusOK)
+}
+
 func convertChirp(chirp database.Chirp) ChirpResponse {
 	return ChirpResponse{
 		Id:        chirp.ID,
