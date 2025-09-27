@@ -1,16 +1,33 @@
 package main
 
 import (
+	"database/sql"
 	"io"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/jmaeagle99/chirpy/internal/database"
+	"github.com/joho/godotenv"
+
+	_ "github.com/lib/pq"
 )
 
 func main() {
 	const contentRoot = "."
 	const port = "8080"
 
-	apiCfg := apiConfig{}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	apiCfg := apiConfig{
+		dbQueries: database.New(db),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/metrics", apiCfg.getHitsHandler)
@@ -24,7 +41,7 @@ func main() {
 		Addr:    ":" + port,
 	}
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
