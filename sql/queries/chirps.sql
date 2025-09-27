@@ -10,3 +10,8 @@ RETURNING *;
 
 -- name: DeleteAllChirps :exec
 DELETE FROM chirps;
+
+-- name: GetAllChirps :many
+SELECT *
+FROM chirps
+ORDER BY chirps.created_at;

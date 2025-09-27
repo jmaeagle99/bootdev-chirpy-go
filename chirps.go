@@ -82,14 +82,36 @@ func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
 
 	writeAsJson(
 		w,
-		ChirpResponse{
-			Id:        chirp.ID,
-			CreatedAt: chirp.CreatedAt,
-			UpdatedAt: chirp.UpdatedAt,
-			Body:      chirp.Body,
-			UserId:    chirp.UserID,
-		},
+		convertChirp(chirp),
 		http.StatusCreated)
+}
+
+func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := cfg.db.GetAllChirps(r.Context())
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	chirpsResponse := make([]ChirpResponse, len(chirps))
+	for index, chirp := range chirps {
+		chirpsResponse[index] = convertChirp(chirp)
+	}
+
+	writeAsJson(
+		w,
+		chirpsResponse,
+		http.StatusOK)
+}
+
+func convertChirp(chirp database.Chirp) ChirpResponse {
+	return ChirpResponse{
+		Id:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserId:    chirp.UserID,
+	}
 }
 
 func writeAsJson(w http.ResponseWriter, value interface{}, statucode int) {
