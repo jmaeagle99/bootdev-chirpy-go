@@ -4,10 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jmaeagle99/chirpy/internal/database"
 )
 
-type Chirp struct {
+type ChirpRequest struct {
 	Body string `json:"body"`
+	// Not secure, but will be fixed in future
+	UserId uuid.UUID `json:"user_id"`
 }
 
 type ErrorResponse struct {
@@ -15,7 +21,11 @@ type ErrorResponse struct {
 }
 
 type ChirpResponse struct {
-	CleanedBody string `json:"cleaned_body"`
+	Id        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserId    uuid.UUID `json:"user_id"`
 }
 
 var bannedWords = []string{
@@ -36,17 +46,17 @@ var bannedWordRegexps = Map(bannedWords, func(word string) *regexp.Regexp {
 	return regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(word) + `\b`)
 })
 
-func validateChirp(w http.ResponseWriter, r *http.Request) {
-	chirp := Chirp{}
+func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
+	request := ChirpRequest{}
 
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&chirp)
+	err := decoder.Decode(&request)
 	if err != nil {
 		writeServerError(w)
 		return
 	}
 
-	if len(chirp.Body) > 140 {
+	if len(request.Body) > 140 {
 		writeAsJson(
 			w,
 			ErrorResponse{
@@ -56,17 +66,30 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content := chirp.Body
+	content := request.Body
 	for _, regexp := range bannedWordRegexps {
 		content = regexp.ReplaceAllString(content, "****")
+	}
+
+	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
+		Body:   content,
+		UserID: request.UserId,
+	})
+	if err != nil {
+		writeServerError(w)
+		return
 	}
 
 	writeAsJson(
 		w,
 		ChirpResponse{
-			CleanedBody: content,
+			Id:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserId:    chirp.UserID,
 		},
-		http.StatusOK)
+		http.StatusCreated)
 }
 
 func writeAsJson(w http.ResponseWriter, value interface{}, statucode int) {
