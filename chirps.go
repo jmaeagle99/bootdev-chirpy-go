@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 )
 
 type Chirp struct {
@@ -13,9 +14,27 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-type ChirpValidationResponse struct {
-	Valid bool `json:"valid"`
+type ChirpResponse struct {
+	CleanedBody string `json:"cleaned_body"`
 }
+
+var bannedWords = []string{
+	"kerfuffle",
+	"sharbert",
+	"fornax",
+}
+
+func Map[T any, U any](input []T, fn func(T) U) []U {
+	result := make([]U, len(input))
+	for i, v := range input {
+		result[i] = fn(v)
+	}
+	return result
+}
+
+var bannedWordRegexps = Map(bannedWords, func(word string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(word) + `\b`)
+})
 
 func validateChirp(w http.ResponseWriter, r *http.Request) {
 	chirp := Chirp{}
@@ -34,17 +53,23 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 				Error: "Chirp is too long",
 			},
 			http.StatusBadRequest)
-	} else {
-		writeAsJson(
-			w,
-			ChirpValidationResponse{
-				Valid: true,
-			},
-			http.StatusOK)
+		return
 	}
+
+	content := chirp.Body
+	for _, regexp := range bannedWordRegexps {
+		content = regexp.ReplaceAllString(content, "****")
+	}
+
+	writeAsJson(
+		w,
+		ChirpResponse{
+			CleanedBody: content,
+		},
+		http.StatusOK)
 }
 
-func writeAsJson(w http.ResponseWriter, value any, statucode int) {
+func writeAsJson(w http.ResponseWriter, value interface{}, statucode int) {
 	data, err := json.Marshal(value)
 	if err != nil {
 		writeServerError(w)
