@@ -9,8 +9,9 @@ import (
 )
 
 type apiConfig struct {
-	dbQueries      *database.Queries
+	db             *database.Queries
 	fileserverHits atomic.Int32
+	platform       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -32,5 +33,11 @@ func (cfg *apiConfig) getHitsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) resetHitsHandler(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	cfg.fileserverHits.Store(0)
+	cfg.db.DeleteAllUsers(r.Context())
 }

@@ -26,7 +26,8 @@ func main() {
 	}
 
 	apiCfg := apiConfig{
-		dbQueries: database.New(db),
+		db:       database.New(db),
+		platform: os.Getenv("PLATFORM"),
 	}
 
 	mux := http.NewServeMux()
@@ -34,6 +35,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetHitsHandler)
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(contentRoot)))))
 	mux.HandleFunc("GET /api/healthz", readinessHandler)
+	mux.HandleFunc("POST /api/users", apiCfg.createUser)
 	mux.HandleFunc("POST /api/validate_chirp", validateChirp)
 
 	server := http.Server{
