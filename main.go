@@ -1,17 +1,27 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
 )
 
+func readinessHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	io.WriteString(w, "OK")
+}
+
 func main() {
+	const contentRoot = "."
+	const port = "8080"
+
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(".")))
+	mux.Handle("/app/", http.StripPrefix("/app/", http.FileServer(http.Dir(contentRoot))))
+	mux.HandleFunc("/healthz", readinessHandler)
 
 	server := http.Server{
 		Handler: mux,
-		Addr:    ":8080",
+		Addr:    ":" + port,
 	}
 
 	err := server.ListenAndServe()
