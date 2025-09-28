@@ -6,17 +6,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmaeagle99/chirpy/internal/auth"
+	"github.com/jmaeagle99/chirpy/internal/database"
 )
 
 type CreateUserRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-type CreateUserResponse struct {
+type UserResponse struct {
 	Id        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+}
+
+type LoginUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +37,16 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := cfg.db.CreateUser(r.Context(), request.Email)
+	hashed_password, err := auth.HashPassword(request.Password)
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	user, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:          request.Email,
+		HashedPassword: hashed_password,
+	})
 	if err != nil {
 		writeServerError(w)
 		return
@@ -37,11 +54,43 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 
 	writeAsJson(
 		w,
-		CreateUserResponse{
-			Id:        user.ID,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-			Email:     user.Email,
-		},
+		convertUser(user),
 		http.StatusCreated)
+}
+
+func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
+	request := LoginUserRequest{}
+
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&request)
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	user, err := cfg.db.GetUserByEmail(r.Context(), request.Email)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	isMatch, err := auth.CheckPasswordHash(request.Password, user.HashedPassword)
+	if err != nil || !isMatch {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	writeAsJson(
+		w,
+		convertUser(user),
+		http.StatusOK)
+}
+
+func convertUser(user database.User) UserResponse {
+	return UserResponse{
+		Id:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
 }
