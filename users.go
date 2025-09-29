@@ -15,6 +15,11 @@ type CreateUserRequest struct {
 	Password string `json:"password"`
 }
 
+type UpdateUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 type LoginUserRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -62,6 +67,44 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 		w,
 		convertUser(user, "", ""),
 		http.StatusCreated)
+}
+
+func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
+	userId, err := cfg.validateUserAccess(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	request := UpdateUserRequest{}
+
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&request)
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	hashed_password, err := auth.HashPassword(request.Password)
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	user, err := cfg.db.UpdateEmailAndPassword(r.Context(), database.UpdateEmailAndPasswordParams{
+		ID:             userId,
+		Email:          request.Email,
+		HashedPassword: hashed_password,
+	})
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	writeAsJson(
+		w,
+		convertUser(user, "", ""),
+		http.StatusOK)
 }
 
 func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
@@ -177,4 +220,13 @@ func convertUser(user database.User, access_token string, refresh_token string) 
 		Token:        access_token,
 		RefreshToken: refresh_token,
 	}
+}
+
+func (cfg *apiConfig) validateUserAccess(r *http.Request) (uuid.UUID, error) {
+	access_token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return auth.ValidateJWT(access_token, cfg.tokenSecret)
 }

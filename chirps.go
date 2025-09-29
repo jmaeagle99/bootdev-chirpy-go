@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmaeagle99/chirpy/internal/auth"
 	"github.com/jmaeagle99/chirpy/internal/database"
 )
 
@@ -46,13 +45,7 @@ var bannedWordRegexps = Map(bannedWords, func(word string) *regexp.Regexp {
 })
 
 func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	userId, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	userId, err := cfg.validateUserAccess(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
