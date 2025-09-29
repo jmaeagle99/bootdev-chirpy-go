@@ -8,8 +8,9 @@ INSERT INTO chirps (
 )
 RETURNING *;
 
--- name: DeleteAllChirps :exec
-DELETE FROM chirps;
+-- name: DeleteChirp :exec
+DELETE FROM chirps
+WHERE id = $1;
 
 -- name: GetAllChirps :many
 SELECT *
