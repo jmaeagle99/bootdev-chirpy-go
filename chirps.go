@@ -129,10 +129,29 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.db.GetAllChirps(r.Context())
-	if err != nil {
-		writeServerError(w)
-		return
+	author_id_qparam := r.URL.Query().Get("author_id")
+
+	var chirps []database.Chirp
+	if len(author_id_qparam) > 0 {
+		user_id, err := uuid.Parse(author_id_qparam)
+		if err != nil {
+			writeServerError(w)
+			return
+		}
+
+		result, err := cfg.db.GetAllChirpsByUser(r.Context(), user_id)
+		if err != nil {
+			writeServerError(w)
+			return
+		}
+		chirps = result
+	} else {
+		result, err := cfg.db.GetAllChirps(r.Context())
+		if err != nil {
+			writeServerError(w)
+			return
+		}
+		chirps = result
 	}
 
 	chirpsResponse := make([]ChirpResponse, len(chirps))
