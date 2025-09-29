@@ -28,6 +28,7 @@ func main() {
 	apiCfg := apiConfig{
 		db:          database.New(db),
 		platform:    os.Getenv("PLATFORM"),
+		polkaKey:    os.Getenv("POLKA_KEY"),
 		tokenSecret: os.Getenv("TOKEN_SECRET"),
 	}
 

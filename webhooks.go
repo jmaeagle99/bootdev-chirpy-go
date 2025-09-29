@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/jmaeagle99/chirpy/internal/auth"
 )
 
 type WebhookEventData interface{}
@@ -42,10 +43,21 @@ func (request *WebhookEventRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (cfg *apiConfig) handleWebhook(w http.ResponseWriter, r *http.Request) {
+	api_key, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if api_key != cfg.polkaKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	request := WebhookEventRequest{}
 
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil {
 		writeServerError(w)
 		return
