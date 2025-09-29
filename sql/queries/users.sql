@@ -12,6 +12,11 @@ RETURNING *;
 -- name: DeleteAllUsers :exec
 DELETE FROM users;
 
+-- name: GetUserById :one
+SELECT *
+FROM users
+WHERE users.id = $1;
+
 -- name: GetUserByEmail :one
 SELECT *
 FROM users
@@ -31,5 +36,11 @@ WHERE
 -- name: UpdateEmailAndPassword :one
 UPDATE users
 SET email = $2, hashed_password = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: UpgradeToRed :one
+UPDATE users
+SET is_chirpy_red = true
 WHERE id = $1
 RETURNING *;

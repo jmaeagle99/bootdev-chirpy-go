@@ -30,6 +30,7 @@ type UserResponse struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Email        string    `json:"email"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
 	Token        string    `json:"token,omitempty"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
 }
@@ -217,6 +218,7 @@ func convertUser(user database.User, access_token string, refresh_token string) 
 		CreatedAt:    user.CreatedAt,
 		UpdatedAt:    user.UpdatedAt,
 		Email:        user.Email,
+		IsChirpyRed:  user.IsChirpyRed,
 		Token:        access_token,
 		RefreshToken: refresh_token,
 	}
@@ -229,4 +231,20 @@ func (cfg *apiConfig) validateUserAccess(r *http.Request) (uuid.UUID, error) {
 	}
 
 	return auth.ValidateJWT(access_token, cfg.tokenSecret)
+}
+
+func (cfg *apiConfig) upgradeUserRed(w http.ResponseWriter, r *http.Request, eventData UserUpgradedEventData) {
+	_, err := cfg.db.GetUserById(r.Context(), eventData.UserId)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	_, err = cfg.db.UpgradeToRed(r.Context(), eventData.UserId)
+	if err != nil {
+		writeServerError(w)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
