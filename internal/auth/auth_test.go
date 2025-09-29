@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -109,6 +110,58 @@ func TestValidateJWT(t *testing.T) {
 			}
 			if actualUserId != tt.expectedUserId {
 				t.Errorf("ValidateJWT() expects %v, got %v", tt.expectedUserId, actualUserId)
+			}
+		})
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	tests := []struct {
+		name          string
+		headers       http.Header
+		expectedError bool
+		expectedValue string
+	}{
+		{
+			name:          "No headers",
+			headers:       http.Header{},
+			expectedError: true,
+			expectedValue: "",
+		},
+		{
+			name:          "Missing Authorization header",
+			headers:       http.Header{"Content-Type": []string{"application/json"}},
+			expectedError: true,
+			expectedValue: "",
+		},
+		{
+			name:          "Empty Authorization header",
+			headers:       http.Header{"Authorization": []string{}},
+			expectedError: true,
+			expectedValue: "",
+		},
+		{
+			name:          "Authorization header mismatch token type",
+			headers:       http.Header{"Authorization": []string{"Custom ABCDE"}},
+			expectedError: true,
+			expectedValue: "",
+		},
+		{
+			name:          "Authorization header is Bearer",
+			headers:       http.Header{"Authorization": []string{"Bearer XYZ"}},
+			expectedError: false,
+			expectedValue: "XYZ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actualValue, err := GetBearerToken(tt.headers)
+			if (err != nil) != tt.expectedError {
+				t.Errorf("GetBearerToken() error = %v, expectedError %v", err, tt.expectedError)
+			}
+			if actualValue != tt.expectedValue {
+				t.Errorf("GetBearerToken() expects %v, got %v", tt.expectedValue, actualValue)
 			}
 		})
 	}

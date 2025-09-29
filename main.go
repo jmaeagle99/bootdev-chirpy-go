@@ -26,8 +26,9 @@ func main() {
 	}
 
 	apiCfg := apiConfig{
-		db:       database.New(db),
-		platform: os.Getenv("PLATFORM"),
+		db:          database.New(db),
+		platform:    os.Getenv("PLATFORM"),
+		tokenSecret: os.Getenv("TOKEN_SECRET"),
 	}
 
 	mux := http.NewServeMux()

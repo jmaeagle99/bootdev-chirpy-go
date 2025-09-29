@@ -15,16 +15,18 @@ type CreateUserRequest struct {
 	Password string `json:"password"`
 }
 
+type LoginUserRequest struct {
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+	ExpiresInSeconds int    `json:"expires_in_seconds"`
+}
+
 type UserResponse struct {
 	Id        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
-}
-
-type LoginUserRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Token     string    `json:"token,omitempty"`
 }
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -54,18 +56,25 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 
 	writeAsJson(
 		w,
-		convertUser(user),
+		convertUser(user, ""),
 		http.StatusCreated)
 }
 
 func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
+	const MaxExpirationInSeconds = 3600 // 1 hour
 	request := LoginUserRequest{}
+	request.ExpiresInSeconds = MaxExpirationInSeconds // default
 
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&request)
 	if err != nil {
 		writeServerError(w)
 		return
+	}
+
+	// Cap the expiration
+	if request.ExpiresInSeconds > MaxExpirationInSeconds {
+		request.ExpiresInSeconds = MaxExpirationInSeconds
 	}
 
 	user, err := cfg.db.GetUserByEmail(r.Context(), request.Email)
@@ -80,17 +89,31 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token, err := auth.MakeJWT(
+		user.ID,
+		cfg.tokenSecret,
+		time.Duration(request.ExpiresInSeconds)*time.Second,
+	)
+	if err != nil || !isMatch {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	writeAsJson(
 		w,
-		convertUser(user),
+		convertUser(user, token),
 		http.StatusOK)
 }
 
-func convertUser(user database.User) UserResponse {
-	return UserResponse{
+func convertUser(user database.User, token string) UserResponse {
+	response := UserResponse{
 		Id:        user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email,
 	}
+	if len(token) > 0 {
+		response.Token = token
+	}
+	return response
 }

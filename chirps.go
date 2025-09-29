@@ -7,13 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmaeagle99/chirpy/internal/auth"
 	"github.com/jmaeagle99/chirpy/internal/database"
 )
 
 type ChirpRequest struct {
 	Body string `json:"body"`
-	// Not secure, but will be fixed in future
-	UserId uuid.UUID `json:"user_id"`
 }
 
 type ErrorResponse struct {
@@ -47,10 +46,22 @@ var bannedWordRegexps = Map(bannedWords, func(word string) *regexp.Regexp {
 })
 
 func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	userId, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	request := ChirpRequest{}
 
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil {
 		writeServerError(w)
 		return
@@ -73,7 +84,7 @@ func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
 
 	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   content,
-		UserID: request.UserId,
+		UserID: userId,
 	})
 	if err != nil {
 		writeServerError(w)
