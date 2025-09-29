@@ -16,17 +16,21 @@ type CreateUserRequest struct {
 }
 
 type LoginUserRequest struct {
-	Email            string `json:"email"`
-	Password         string `json:"password"`
-	ExpiresInSeconds int    `json:"expires_in_seconds"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type UserResponse struct {
-	Id        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token,omitempty"`
+	Id           uuid.UUID `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string    `json:"email"`
+	Token        string    `json:"token,omitempty"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
+}
+
+type AccessTokenResponse struct {
+	Token string `json:"token"`
 }
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -56,25 +60,18 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 
 	writeAsJson(
 		w,
-		convertUser(user, ""),
+		convertUser(user, "", ""),
 		http.StatusCreated)
 }
 
 func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
-	const MaxExpirationInSeconds = 3600 // 1 hour
 	request := LoginUserRequest{}
-	request.ExpiresInSeconds = MaxExpirationInSeconds // default
 
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&request)
 	if err != nil {
 		writeServerError(w)
 		return
-	}
-
-	// Cap the expiration
-	if request.ExpiresInSeconds > MaxExpirationInSeconds {
-		request.ExpiresInSeconds = MaxExpirationInSeconds
 	}
 
 	user, err := cfg.db.GetUserByEmail(r.Context(), request.Email)
@@ -89,31 +86,95 @@ func (cfg *apiConfig) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(
+	refresh_token, err := auth.MakeRefreshToken()
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	_, err = cfg.db.RegisterRefreshToken(
+		r.Context(),
+		database.RegisterRefreshTokenParams{
+			Token:     refresh_token,
+			UserID:    user.ID,
+			ExpiresAt: time.Now().UTC().Add(60 * 24 * time.Hour),
+		})
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	access_token, err := auth.MakeJWT(
 		user.ID,
 		cfg.tokenSecret,
-		time.Duration(request.ExpiresInSeconds)*time.Second,
+		time.Hour,
 	)
-	if err != nil || !isMatch {
+	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	writeAsJson(
 		w,
-		convertUser(user, token),
+		convertUser(user, access_token, refresh_token),
 		http.StatusOK)
 }
 
-func convertUser(user database.User, token string) UserResponse {
-	response := UserResponse{
-		Id:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+func (cfg *apiConfig) getAccessToken(w http.ResponseWriter, r *http.Request) {
+	refresh_token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
-	if len(token) > 0 {
-		response.Token = token
+
+	user, err := cfg.db.GetUserByRefreshToken(r.Context(), refresh_token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
-	return response
+
+	access_token, err := auth.MakeJWT(
+		user.ID,
+		cfg.tokenSecret,
+		time.Hour,
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	writeAsJson(
+		w,
+		AccessTokenResponse{
+			Token: access_token,
+		},
+		http.StatusOK,
+	)
+}
+
+func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request) {
+	refresh_token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	err = cfg.db.RevokeRefreshToken(r.Context(), refresh_token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func convertUser(user database.User, access_token string, refresh_token string) UserResponse {
+	return UserResponse{
+		Id:           user.ID,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+		Email:        user.Email,
+		Token:        access_token,
+		RefreshToken: refresh_token,
+	}
 }
